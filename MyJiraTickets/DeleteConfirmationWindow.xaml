@@ -1,0 +1,121 @@
+<Window x:Class="MyJiraTickets.DeleteConfirmationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Confirm Ticket Deletion" 
+        Height="550" 
+        Width="700"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="#f5f5f5"
+        KeyDown="Window_KeyDown">
+    
+    <Grid Margin="30">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="30"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Warning Icon and Title -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15">
+            <TextBlock Text="⚠️" FontSize="24" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <TextBlock Text="Delete Ticket Confirmation" 
+                       FontSize="16" 
+                       FontWeight="Bold" 
+                       VerticalAlignment="Center"
+                       Foreground="#d32f2f"/>
+        </StackPanel>
+
+        <!-- Ticket Info -->
+        <TextBlock Grid.Row="1" 
+                   Text="You are about to delete the following ticket:"
+                   Margin="0,0,0,10"
+                   FontSize="12"/>
+        
+        <Border Grid.Row="2" 
+                Background="#e3f2fd" 
+                BorderBrush="#2196f3" 
+                BorderThickness="1" 
+                CornerRadius="5" 
+                Padding="15"
+                Margin="0,0,0,15">
+            <TextBlock x:Name="TicketInfoText" 
+                       FontWeight="Bold"
+                       FontSize="14"
+                       Foreground="#1976d2"/>
+        </Border>
+
+        <!-- Confirmation Input -->
+        <StackPanel Grid.Row="3" Margin="0,10,0,20">
+            <TextBlock Text="⚠️ VAŽNO: Da biste potvrdili brisanje, ukucajte TAČNO naziv tiketa:"
+                       Margin="0,0,0,10"
+                       FontSize="13"
+                       FontWeight="Bold"
+                       Foreground="#d32f2f"
+                       TextWrapping="Wrap"/>
+            
+            <Border BorderBrush="#d32f2f" 
+                    BorderThickness="3" 
+                    CornerRadius="5"
+                    Background="White"
+                    Margin="0,0,0,10">
+                <TextBox x:Name="ConfirmationTextBox" 
+                         FontSize="20"
+                         Height="50"
+                         Padding="15"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         FontWeight="Bold"
+                         TextChanged="ConfirmationTextBox_TextChanged"
+                         VerticalContentAlignment="Center"
+                         FontFamily="Consolas"/>
+            </Border>
+            
+            <TextBlock x:Name="HintTextBlock"
+                       Text="Ukucajte: SCRUM-1 (case sensitive!)"
+                       FontSize="12"
+                       Foreground="#666"
+                       FontStyle="Italic"
+                       Margin="0,0,0,5"/>
+                       
+            <TextBlock x:Name="ErrorMessage"
+                       Foreground="#d32f2f"
+                       FontSize="12"
+                       FontWeight="Bold"
+                       Margin="0,5,0,0"
+                       Visibility="Collapsed"/>
+        </StackPanel>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="5" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right"
+                    Margin="0,20,0,0">
+            <Button Name="CancelButton" 
+                    Content="❌ Cancel" 
+                    Width="120" 
+                    Height="45"
+                    FontSize="14"
+                    FontWeight="Bold"
+                    Margin="0,0,15,0"
+                    Background="#f5f5f5"
+                    BorderBrush="#ccc"
+                    BorderThickness="2"
+                    Click="CancelButton_Click"/>
+            <Button Name="DeleteButton" 
+                    Content="🗑️ Delete" 
+                    Width="120" 
+                    Height="45"
+                    FontSize="14"
+                    FontWeight="Bold"
+                    Background="#d32f2f"
+                    Foreground="White"
+                    BorderThickness="0"
+                    IsEnabled="False"
+                    Click="DeleteButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

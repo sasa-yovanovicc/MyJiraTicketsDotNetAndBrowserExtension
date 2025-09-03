@@ -1,0 +1,37 @@
+<Window x:Class="MyJiraTickets.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Podešavanja" Height="340" Width="480" WindowStartupLocation="CenterOwner">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- BaseUrl -->
+            <RowDefinition Height="Auto"/> <!-- Username -->
+            <RowDefinition Height="Auto"/> <!-- Password -->
+            <RowDefinition Height="Auto"/> <!-- Api Key -->
+            <RowDefinition Height="Auto"/> <!-- Path -->
+            <RowDefinition Height="Auto"/> <!-- Button -->
+            <RowDefinition Height="*"/>  <!-- Spacer -->
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="140"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="Jira Base URL:" VerticalAlignment="Center"/>
+        <TextBox x:Name="BaseUrlBox" Grid.Row="0" Grid.Column="1" Margin="5 0 0 5"/>
+
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="Jira Username:" VerticalAlignment="Center"/>
+        <TextBox x:Name="UsernameBox" Grid.Row="1" Grid.Column="1" Margin="5 0 0 5"/>
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="Jira Password:" VerticalAlignment="Center"/>
+        <PasswordBox x:Name="PasswordBox" Grid.Row="2" Grid.Column="1" Margin="5 0 0 5"/>
+
+        <TextBlock Grid.Row="3" Grid.Column="0" Text="Jira API Key:" VerticalAlignment="Center"/>
+        <TextBox x:Name="ApiKeyBox" Grid.Row="3" Grid.Column="1" Margin="5 0 0 5"/>
+
+        <TextBlock Grid.Row="4" Grid.Column="0" Text="Putanja za start.html:" VerticalAlignment="Center"/>
+        <TextBox x:Name="HtmlPathBox" Grid.Row="4" Grid.Column="1" Margin="5 0 0 5"/>
+
+        <Button Grid.Row="5" Grid.Column="1" Content="Sačuvaj" Width="110" HorizontalAlignment="Right" Margin="0,10,0,0" Click="Save_Click"/>
+    </Grid>
+</Window>

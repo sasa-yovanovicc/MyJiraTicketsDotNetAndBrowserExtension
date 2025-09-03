@@ -1,0 +1,920 @@
+﻿    // Učitaj tikete iz Jira i upiši u bazu, vrati true ako je uspešno
+    private async Task<bool> LoadTicketsFromJiraAsync()
+    {
+        try
+        {
+            var settings = Models.AppSettings.Load("appsettings.json");
+            var jira = new MyJobs.Services.JiraService(
+                settings.Jira.BaseUrl,
+                settings.Jira.Username,
+                settings.Jira.Password,
+                settings.Jira.ApiKey);
+            var jiraTickets = await jira.GetAllTicketsAsync();
+            if (jiraTickets == null || jiraTickets.Count == 0)
+                return false;
+
+            _tickets.Clear();
+            foreach (var jt in jiraTickets)
+            {
+                var t = new Models.Ticket
+                {
+                    Key = jt.Key,
+                    Url = jt.Url,
+                    Summary = jt.Summary,
+                    Status = jt.Status,
+                    Type = jt.Type,
+                    Priority = jt.Priority
+                };
+                _tickets.Add(t);
+            }
+            Models.TicketDatabase.SaveTickets(_tickets);
+            BindTickets();
+            return true;
+        }
+        catch { return false; }
+    }
+using System.Text;
+using System.Windows;
+using System.Windows.Controls;
+using System.Threading.Tasks;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.IO;
+using System.Net;
+using System;
+using System.Text.RegularExpressions;
+using System.Linq;
+
+namespace MyJobs;
+
+/// <summary>
+/// Interaction logic for MainWindow.xaml
+/// </summary>
+public partial class MainWindow : Window
+{
+    private readonly List<Models.Ticket> _tickets = new();
+
+    public MainWindow()
+    {
+        InitializeComponent();
+    LoadTickets();
+    BindTickets();
+        
+        // Inicijalizuj mod na osnovu appsettings.json
+        var settings = Models.AppSettings.Load("appsettings.json");
+        var manualMode = (CheckBox)FindName("ManualModeBox");
+        var ticketNameBox = (TextBox)FindName("TicketNameBox");
+        if (settings.Mode?.ToLowerInvariant() == "jira")
+        {
+            // Pokušaj povezivanja na Jira i učitavanja tiketa
+            TryLoadTicketsFromJiraOrFallbackToManual();
+        }
+        else
+        {
+            if (manualMode != null) manualMode.IsChecked = true;
+            if (ticketNameBox != null)
+            {
+                ticketNameBox.IsReadOnly = false;
+                ticketNameBox.Text = "(enter ticket name)";
+            }
+        }
+
+        // Add event handlers for validation
+        var jiraUrlBox = (TextBox)FindName("JiraUrlBox");
+        var statusBox = (ComboBox)FindName("StatusBox");
+        if (jiraUrlBox != null) jiraUrlBox.TextChanged += (s, e) => UpdateButtonStates();
+        if (ticketNameBox != null) ticketNameBox.TextChanged += (s, e) => UpdateButtonStates();
+        if (statusBox != null) statusBox.SelectionChanged += (s, e) => UpdateButtonStates();
+        UpdateButtonStates();
+    // Pokušaj da učitaš tikete iz Jira, ako ne uspe prebacuje na manual mode
+    private async void TryLoadTicketsFromJiraOrFallbackToManual()
+    {
+        var manualMode = (CheckBox)FindName("ManualModeBox");
+        var ticketNameBox = (TextBox)FindName("TicketNameBox");
+        try
+        {
+            bool success = await LoadTicketsFromJiraAsync();
+            if (!success)
+            {
+                if (manualMode != null) manualMode.IsChecked = true;
+                if (ticketNameBox != null)
+                {
+                    ticketNameBox.IsReadOnly = false;
+                    ticketNameBox.Text = "(enter ticket name)";
+                }
+                ShowStatusMessage("Jira povezivanje nije uspelo, prebačeno na manual mode.", Colors.Orange);
+            }
+            else
+            {
+                if (manualMode != null) manualMode.IsChecked = false;
+                if (ticketNameBox != null) ticketNameBox.IsReadOnly = true;
+                ShowStatusMessage("Jira tiketi uspešno učitani.", Colors.Green);
+            }
+        }
+        catch
+        {
+            if (manualMode != null) manualMode.IsChecked = true;
+            if (ticketNameBox != null)
+            {
+                ticketNameBox.IsReadOnly = false;
+                ticketNameBox.Text = "(enter ticket name)";
+            }
+            ShowStatusMessage("Jira povezivanje nije uspelo, prebačeno na manual mode.", Colors.Orange);
+        }
+    }
+
+        // Add event handlers for validation
+        var jiraUrlBox = (TextBox)FindName("JiraUrlBox");
+        var statusBox = (ComboBox)FindName("StatusBox");
+        
+        if (jiraUrlBox != null) jiraUrlBox.TextChanged += (s, e) => UpdateButtonStates();
+        if (ticketNameBox != null) ticketNameBox.TextChanged += (s, e) => UpdateButtonStates();
+        if (statusBox != null) statusBox.SelectionChanged += (s, e) => UpdateButtonStates();
+
+        UpdateButtonStates();
+    }
+
+    private void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        var win = new SettingsWindow();
+        win.ShowDialog();
+    }
+
+    private void AddTicket_Click(object sender, RoutedEventArgs e)
+    {
+        var jiraUrlBox = (TextBox)FindName("JiraUrlBox");
+        var ticketNameBox = (TextBox)FindName("TicketNameBox");
+        var manualMode = (CheckBox)FindName("ManualModeBox");
+        var statusBox = (ComboBox)FindName("StatusBox");
+        var input = jiraUrlBox?.Text.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(input)) return;
+
+        string issueKey;
+        string fullUrl;
+        if (!input.Contains("/"))
+        {
+            issueKey = input.ToUpperInvariant();
+            var settingsTmp = Models.AppSettings.Load("appsettings.json");
+            var baseUrl = settingsTmp.Jira.BaseUrl.TrimEnd('/');
+            fullUrl = $"{baseUrl}/browse/{issueKey}";
+        }
+        else
+        {
+            var parts = input.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            issueKey = parts.Last();
+            fullUrl = input;
+        }
+
+        if (_tickets.Any(t => t.Key.Equals(issueKey, StringComparison.OrdinalIgnoreCase)))
+        {
+            MessageBox.Show("Ticket is already added.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // Always go to manual mode - Jira API is not used
+        string summary = ticketNameBox?.Text?.Trim() ?? issueKey;
+        if (string.IsNullOrWhiteSpace(summary) || summary == "(enter ticket name)")
+        {
+            MessageBox.Show("Please enter ticket name.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        string status = "";
+        if (statusBox != null && statusBox.SelectedItem is ComboBoxItem cbi && cbi.Content is string s)
+            status = s;
+        var ticket = new Models.Ticket { Key = issueKey, Url = fullUrl, Summary = summary, Status = status };
+        
+        // Add to database directly
+        Models.TicketDatabase.AddTicket(ticket);
+        _tickets.Add(ticket);
+        Console.WriteLine($"AddTicket: Added {issueKey}, total tickets: {_tickets.Count}");
+        
+        BindTickets();
+        ShowStatusMessage("Ticket added and saved", Colors.Green);
+        
+        // Clear fields for next entry
+        if (jiraUrlBox != null) jiraUrlBox.Text = "";
+        if (ticketNameBox != null) ticketNameBox.Text = "(enter ticket name)";
+        if (statusBox != null) statusBox.SelectedIndex = 0; // To Do
+    }    private void FetchIssueSummaryAsync()
+    {
+        var ticketNameBox = (TextBox)FindName("TicketNameBox");
+        var manualMode = (CheckBox)FindName("ManualModeBox");
+        
+        // Always manual mode - Jira API is not used
+        if (ticketNameBox != null) 
+        {
+            ticketNameBox.IsReadOnly = false;
+            if (string.IsNullOrWhiteSpace(ticketNameBox.Text))
+                ticketNameBox.Text = "(enter ticket name)";
+        }
+    }
+
+    private void JiraUrlBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        FetchIssueSummaryAsync();
+    }
+
+    private void JiraUrlBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            FetchIssueSummaryAsync();
+        }
+    }
+
+    private void GenerateHtml_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = Models.AppSettings.Load("appsettings.json");
+            var htmlPath = settings.StartHtmlPath;
+            
+            if (string.IsNullOrWhiteSpace(htmlPath))
+            {
+                MessageBox.Show("start.html path is not configured.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            GenerateStartHtml(htmlPath);
+            MessageBox.Show($"start.html has been successfully generated at:\n{htmlPath}", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error generating start.html: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void GenerateStartHtml(string filePath)
+    {
+        var settings = Models.AppSettings.Load("appsettings.json");
+        
+        if (string.IsNullOrWhiteSpace(settings.HtmlContentId))
+        {
+            // Generate full HTML file
+            GenerateFullHtml(filePath);
+        }
+        else
+        {
+            // Inject content into existing div
+            InjectHtmlContent(filePath, settings.HtmlContentId);
+        }
+    }
+
+    private void GenerateFullHtml(string filePath)
+    {
+        var html = new StringBuilder();
+        html.AppendLine("<!DOCTYPE html>");
+        html.AppendLine("<html>");
+        html.AppendLine("<head>");
+        html.AppendLine("    <meta charset=\"utf-8\">");
+        html.AppendLine("    <title>Jira Tickets</title>");
+        html.AppendLine("    <style>");
+        html.AppendLine("        body { font-family: Arial, sans-serif; margin: 20px; }");
+        html.AppendLine("        table { border-collapse: collapse; width: 100%; }");
+        html.AppendLine("        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }");
+        html.AppendLine("        th { background-color: #f2f2f2; font-weight: bold; }");
+        html.AppendLine("        .status { padding: 4px 8px; border-radius: 3px; color: white; font-weight: bold; }");
+        html.AppendLine("        .todo { background-color: #ffd700; color: black; }");
+        html.AppendLine("        .refinement { background-color: lightblue; color: black; }");
+        html.AppendLine("        .inprogress { background-color: #0C9073; }");
+        html.AppendLine("        .waitingdeploy { background-color: #726E6E; }");
+        html.AppendLine("        .intest { background-color: #85C50E; color: black; }");
+        html.AppendLine("        .testsucceeded { background-color: #0C9073; color: yellow; }");
+        html.AppendLine("        .testfailed { background-color: red; }");
+        html.AppendLine("        .done { color: green; font-weight: bold; }");
+        html.AppendLine("        .canceled { background-color: gray; }");
+        html.AppendLine("        .onhold { background-color: #3B02F7; color: #FBFF1C; }");
+        html.AppendLine("    </style>");
+        html.AppendLine("</head>");
+        html.AppendLine("<body>");
+        html.AppendLine("    <h1>Jira Tickets</h1>");
+        
+        AppendTicketsTable(html);
+        
+        html.AppendLine("</body>");
+        html.AppendLine("</html>");
+
+        File.WriteAllText(filePath, html.ToString());
+    }
+
+    private void InjectHtmlContent(string filePath, string contentId)
+    {
+        try
+        {
+            if (!File.Exists(filePath))
+            {
+                throw new FileNotFoundException($"HTML file not found: {filePath}");
+            }
+
+            string existingHtml = File.ReadAllText(filePath);
+            
+            // Generate just the tickets table
+            var tableHtml = new StringBuilder();
+            AppendTicketsTable(tableHtml);
+            string newContent = tableHtml.ToString();
+
+            // Find and replace content within the specified div
+            string pattern = $@"(<div[^>]*id\s*=\s*[""']{contentId}[""'][^>]*>)(.*?)(<\/div>)";
+            string replacement = $"$1{newContent}$3";
+            
+            string updatedHtml = System.Text.RegularExpressions.Regex.Replace(
+                existingHtml, 
+                pattern, 
+                replacement, 
+                System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            if (updatedHtml == existingHtml)
+            {
+                throw new InvalidOperationException($"Div with id '{contentId}' not found in HTML file.");
+            }
+
+            File.WriteAllText(filePath, updatedHtml);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Error injecting HTML content: {ex.Message}", ex);
+        }
+    }
+
+    private void AppendTicketsTable(StringBuilder html)
+    {
+        html.AppendLine("    <table>");
+        html.AppendLine("        <thead>");
+        html.AppendLine("            <tr>");
+        html.AppendLine("                <th>Issue</th>");
+        html.AppendLine("                <th>Summary</th>");
+        html.AppendLine("                <th>Status</th>");
+        html.AppendLine("            </tr>");
+        html.AppendLine("        </thead>");
+        html.AppendLine("        <tbody>");
+
+        foreach (var ticket in _tickets.OrderByDescending(t => t.Key))
+        {
+            var statusClass = GetStatusClass(ticket.Status);
+            html.AppendLine("            <tr>");
+            html.AppendLine($"                <td><a href=\"{ticket.Url}\" target=\"_blank\">{ticket.Key}</a></td>");
+            html.AppendLine($"                <td>{WebUtility.HtmlEncode(ticket.Summary)}</td>");
+            html.AppendLine($"                <td><span class=\"status {statusClass}\">{ticket.Status}</span></td>");
+            html.AppendLine("            </tr>");
+        }
+
+        html.AppendLine("        </tbody>");
+        html.AppendLine("    </table>");
+    }
+
+    private string GetStatusClass(string status)
+    {
+        return status?.ToLowerInvariant().Replace(" ", "") switch
+        {
+            "todo" => "todo",
+            "refinement" => "refinement",
+            "inprogress" => "inprogress", 
+            "waitingfordeploy" => "waitingdeploy",
+            "intest" => "intest",
+            "testsucceeded" => "testsucceeded",
+            "testfailed" => "testfailed",
+            "done" => "done",
+            "canceled" => "canceled",
+            "onhold" => "onhold",
+            _ => ""
+        };
+    }
+
+    private void LoadFromHtml_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = Models.AppSettings.Load("appsettings.json");
+            var htmlPath = settings.StartHtmlPath;
+            if (string.IsNullOrWhiteSpace(htmlPath) || !File.Exists(htmlPath))
+            {
+                MessageBox.Show("start.html fajl nije pronađen na putanji: " + htmlPath, "Greška", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var htmlContent = File.ReadAllText(htmlPath);
+            var ticketsFromHtml = ParseTicketsFromHtml(htmlContent);
+            
+            int addedCount = 0;
+            foreach (var ticket in ticketsFromHtml)
+            {
+                if (!_tickets.Any(t => t.Key.Equals(ticket.Key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _tickets.Add(ticket);
+                    addedCount++;
+                }
+            }
+            
+            if (addedCount > 0)
+            {
+                SaveTickets();
+                BindTickets();
+                MessageBox.Show($"Dodano {addedCount} novih tiketa iz start.html", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show("Nisu pronađeni novi tiketi u start.html", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Greška pri čitanju start.html: " + ex.Message, "Greška", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void SaveChanges_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            SaveTickets();
+            // Just rebind the existing tickets, no need to reload from file
+            BindTickets();
+            
+            // Also update the HTML file
+            var settings = Models.AppSettings.Load("appsettings.json");
+            if (!string.IsNullOrWhiteSpace(settings.StartHtmlPath))
+            {
+                GenerateStartHtml(settings.StartHtmlPath);
+            }
+            
+            ShowStatusMessage("All changes saved to files", Colors.Blue);
+            MessageBox.Show("Tickets saved to tickets.json", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Error saving: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void RefreshTickets_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            LoadTickets();
+            BindTickets();
+            MessageBox.Show("Tickets refreshed from file.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Error refreshing: " + ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private List<Models.Ticket> ParseTicketsFromHtml(string htmlContent)
+    {
+        var tickets = new List<Models.Ticket>();
+        
+        try
+        {
+            var settings = Models.AppSettings.Load("appsettings.json");
+            var contentId = settings.HtmlContentId;
+            
+            string searchContent = htmlContent;
+            
+            // Ako je specificiran HtmlContentId, traži samo u tom div-u
+            if (!string.IsNullOrEmpty(contentId))
+            {
+                var divPattern = $@"<div[^>]*id=""{contentId}""[^>]*>(.*?)</div>";
+                var divMatch = Regex.Match(htmlContent, divPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                if (divMatch.Success)
+                {
+                    searchContent = divMatch.Groups[1].Value;
+                }
+                else
+                {
+                    // Ako ne pronađe div sa tim ID, vrati praznu listu
+                    MessageBox.Show($"Div sa ID '{contentId}' nije pronađen u start.html", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return tickets;
+                }
+            }
+            
+            // Jednostavan regex - tražimo tikete sa span status elementom
+            var ticketPattern = @"<a\s+href=""([^""]*/(CCCS|BIDE|[A-Z]+)-(\d+)[^""]*)""\s+target=""_blank""[^>]*>\s*([^<]+)<span[^>]*class=""status[^""]*""[^>]*>([^<]+)</span>";
+            var matches = Regex.Matches(searchContent, ticketPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            
+            foreach (Match match in matches)
+            {
+                if (match.Groups.Count >= 6)
+                {
+                    var url = match.Groups[1].Value.Trim();
+                    var project = match.Groups[2].Value.Trim();
+                    var number = match.Groups[3].Value.Trim();
+                    var fullText = match.Groups[4].Value.Trim();
+                    var status = match.Groups[5].Value.Trim();
+                    
+                    var key = $"{project}-{number}";
+                    
+                    // Očisti summary - ukloni key ako postoji na početku
+                    var summary = fullText;
+                    if (summary.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        summary = summary.Substring(key.Length).Trim();
+                    }
+                    
+                    // Mapiranje statusa iz HTML-a u naše statuse
+                    var mappedStatus = MapHtmlStatusToOurStatus(status);
+                    
+                    tickets.Add(new Models.Ticket 
+                    { 
+                        Key = key, 
+                        Url = url, 
+                        Summary = summary, 
+                        Status = mappedStatus 
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Greška pri parsiranju HTML-a: {ex.Message}", "Greška", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        
+        return tickets;
+    }
+
+    private string MapHtmlStatusToOurStatus(string htmlStatus)
+    {
+        return htmlStatus.ToLower() switch
+        {
+            "to do" => "To Do",
+            "in progress" => "In Progress", 
+            "in test" => "In Test",
+            "test succeeded" => "Test Succeeded",
+            "test failed" => "Test Failed",
+            "done" => "Done",
+            "on hold" => "On Hold",
+            "waiting for deploy" => "Waiting for Deploy",
+            _ => htmlStatus // Vrati originalno ako ne prepozna
+        };
+    }
+
+    private void ManualModeBox_Changed(object sender, RoutedEventArgs e)
+    {
+        var ticketNameBox = (TextBox)FindName("TicketNameBox");
+        var manualMode = (CheckBox)FindName("ManualModeBox");
+        if (ticketNameBox != null && manualMode != null)
+        {
+            ticketNameBox.IsReadOnly = manualMode.IsChecked != true ? true : false;
+            if (manualMode.IsChecked == true && string.IsNullOrWhiteSpace(ticketNameBox.Text))
+                ticketNameBox.Text = "(unesi naziv tiketa)";
+        }
+    }
+
+    private void OpenTicket_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string url && !string.IsNullOrWhiteSpace(url))
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = url, UseShellExecute = true }); }
+            catch (Exception ex) { MessageBox.Show(ex.Message, "Greška", MessageBoxButton.OK, MessageBoxImage.Error); }
+        }
+    }
+
+    private void LoadTickets()
+    {
+        try
+        {
+            var list = Models.TicketDatabase.LoadTickets();
+            _tickets.Clear();
+            _tickets.AddRange(list);
+        }
+        catch { /* ignore */ }
+    }
+
+    private void LoadFromStartHtml()
+    {
+        try
+        {
+            var settings = Models.AppSettings.Load("appsettings.json");
+            var htmlPath = settings.StartHtmlPath;
+            if (string.IsNullOrWhiteSpace(htmlPath) || !File.Exists(htmlPath))
+            {
+                return; // Silent fail during startup
+            }
+
+            var htmlContent = File.ReadAllText(htmlPath);
+            var ticketsFromHtml = ParseTicketsFromHtml(htmlContent);
+            
+            foreach (var ticket in ticketsFromHtml)
+            {
+                if (!_tickets.Any(t => t.Key.Equals(ticket.Key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _tickets.Add(ticket);
+                    Models.TicketDatabase.AddTicket(ticket);
+                }
+            }
+        }
+        catch { /* ignore */ }
+    }
+
+    private void SaveTickets()
+    {
+        try
+        {
+            Models.TicketDatabase.SaveTickets(_tickets);
+            Console.WriteLine($"SaveTickets() called - saved {_tickets.Count} tickets to SQLite database");
+        }
+        catch (Exception ex) 
+        { 
+            Console.WriteLine($"SaveTickets() error: {ex.Message}");
+        }
+    }
+
+    private void BindTickets()
+    {
+        var dataGrid = (DataGrid)FindName("TicketsList");
+        if (dataGrid != null)
+        {
+            dataGrid.ItemsSource = null;
+            dataGrid.ItemsSource = _tickets.OrderByDescending(t => t.Key).ToList();
+        }
+    }
+
+    private void TicketsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is DataGrid dg && dg.SelectedItem is Models.Ticket t)
+        {
+            var jiraUrlBox = (TextBox)FindName("JiraUrlBox");
+            var ticketNameBox = (TextBox)FindName("TicketNameBox");
+            var statusBox = (ComboBox)FindName("StatusBox");
+            if (jiraUrlBox != null) jiraUrlBox.Text = t.Url;
+            if (ticketNameBox != null) ticketNameBox.Text = t.Summary;
+            if (statusBox != null)
+            {
+                foreach (var item in statusBox.Items)
+                {
+                    if (item is ComboBoxItem cbi && cbi.Content is string s && s.Equals(t.Status, StringComparison.OrdinalIgnoreCase))
+                    {
+                        statusBox.SelectedItem = cbi;
+                        break;
+                    }
+                }
+            }
+        }
+        UpdateButtonStates();
+    }
+
+    private void TicketsList_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    {
+        if (e.Column.Header.ToString() == "Status")
+        {
+            // Auto-save when status is changed
+            var timer = new System.Windows.Threading.DispatcherTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(100);
+            timer.Tick += (s, args) =>
+            {
+                timer.Stop();
+                SaveTickets();
+                BindTickets(); // Refresh to show status color changes
+                ShowStatusMessage("Changes saved automatically", Colors.Green);
+            };
+            timer.Start();
+        }
+    }
+
+    private void StatusBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var dataGrid = (DataGrid)FindName("TicketsList");
+        var statusBox = sender as ComboBox;
+        if (dataGrid?.SelectedItem is Models.Ticket t && statusBox?.SelectedItem is ComboBoxItem cbi && cbi.Content is string s)
+        {
+            t.Status = s;
+            // Update status directly in database
+            Models.TicketDatabase.UpdateTicketStatus(t.Key, s);
+            BindTickets(); // Refresh the table to show color changes
+            ShowStatusMessage("Status updated", Colors.Blue);
+        }
+    }
+
+    private void DeleteTicket_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.DataContext is Models.Ticket ticket)
+        {
+            if (ConfirmTicketDeletion(ticket))
+            {
+                _tickets.Remove(ticket);
+                // Delete from database directly
+                Models.TicketDatabase.DeleteTicket(ticket.Key);
+                BindTickets();
+                ShowStatusMessage("Ticket deleted", Colors.Orange);
+            }
+        }
+    }
+
+    private void DeleteSelectedTicket_Click(object sender, RoutedEventArgs e)
+    {
+        var dataGrid = (DataGrid)FindName("TicketsList");
+        if (dataGrid?.SelectedItem is Models.Ticket ticket)
+        {
+            if (ConfirmTicketDeletion(ticket))
+            {
+                _tickets.Remove(ticket);
+                // Delete from database directly
+                Models.TicketDatabase.DeleteTicket(ticket.Key);
+                BindTickets();
+                ClearForm(); // Clear form after deletion
+                ShowStatusMessage("Ticket deleted", Colors.Orange);
+            }
+        }
+        else
+        {
+            MessageBox.Show("Please select a ticket to delete.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    private bool ConfirmTicketDeletion(Models.Ticket ticket)
+    {
+        var inputDialog = new Window
+        {
+            Title = "Confirm Ticket Deletion",
+            Width = 400,
+            Height = 200,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = this,
+            ResizeMode = ResizeMode.NoResize
+        };
+
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var label1 = new TextBlock
+        {
+            Text = $"To delete ticket {ticket.Key}, please enter the ticket number:",
+            Margin = new Thickness(20, 20, 20, 10),
+            FontWeight = FontWeights.Bold,
+            TextWrapping = TextWrapping.Wrap
+        };
+        Grid.SetRow(label1, 0);
+
+        var label2 = new TextBlock
+        {
+            Text = $"Enter: {ticket.Key}",
+            Margin = new Thickness(20, 0, 20, 10),
+            FontSize = 14,
+            Foreground = System.Windows.Media.Brushes.Red
+        };
+        Grid.SetRow(label2, 1);
+
+        var textBox = new TextBox
+        {
+            Margin = new Thickness(20, 0, 20, 20),
+            Height = 25,
+            FontSize = 14
+        };
+        Grid.SetRow(textBox, 2);
+
+        var buttonPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(20)
+        };
+
+        var okButton = new Button
+        {
+            Content = "Delete",
+            Width = 80,
+            Height = 30,
+            Margin = new Thickness(0, 0, 10, 0),
+            IsDefault = true
+        };
+
+        var cancelButton = new Button
+        {
+            Content = "Cancel",
+            Width = 80,
+            Height = 30,
+            IsCancel = true
+        };
+
+        bool result = false;
+
+        okButton.Click += (s, e) =>
+        {
+            if (textBox.Text == ticket.Key) // Case sensitive comparison
+            {
+                result = true;
+                inputDialog.DialogResult = true;
+            }
+            else
+            {
+                MessageBox.Show($"Entered text '{textBox.Text}' does not match ticket number '{ticket.Key}'.\nDeletion cancelled.", 
+                               "Incorrect Input", MessageBoxButton.OK, MessageBoxImage.Warning);
+                textBox.Focus();
+                textBox.SelectAll();
+            }
+        };
+
+        cancelButton.Click += (s, e) =>
+        {
+            inputDialog.DialogResult = false;
+        };
+
+        buttonPanel.Children.Add(okButton);
+        buttonPanel.Children.Add(cancelButton);
+        Grid.SetRow(buttonPanel, 4);
+
+        grid.Children.Add(label1);
+        grid.Children.Add(label2);
+        grid.Children.Add(textBox);
+        grid.Children.Add(buttonPanel);
+
+        inputDialog.Content = grid;
+        
+        textBox.Focus();
+        inputDialog.ShowDialog();
+
+        return result;
+    }
+
+    private void TicketsList_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Delete)
+        {
+            DeleteSelectedTicket_Click(sender, e);
+        }
+    }
+
+    private void EditTicket_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem && menuItem.DataContext is Models.Ticket ticket)
+        {
+            var editWindow = new EditTicketWindow(ticket);
+            if (editWindow.ShowDialog() == true)
+            {
+                SaveTickets();
+                BindTickets();
+            }
+        }
+    }
+
+    private void UpdateButtonStates()
+    {
+        var jiraUrlBox = (TextBox)FindName("JiraUrlBox");
+        var ticketNameBox = (TextBox)FindName("TicketNameBox");
+        var statusBox = (ComboBox)FindName("StatusBox");
+        var addTicketBtn = (Button)FindName("AddTicketBtn");
+        var deleteSelectedBtn = (Button)FindName("DeleteSelectedBtn");
+        var saveChangesBtn = (Button)FindName("SaveChangesBtn");
+        var ticketsList = (DataGrid)FindName("TicketsList");
+
+        // Add Ticket validation
+        bool canAddTicket = false;
+        if (jiraUrlBox != null && ticketNameBox != null && statusBox != null)
+        {
+            var hasUrl = !string.IsNullOrWhiteSpace(jiraUrlBox.Text);
+            var hasName = !string.IsNullOrWhiteSpace(ticketNameBox.Text) && 
+                         ticketNameBox.Text != "(enter ticket name)";
+            var hasStatus = statusBox.SelectedItem != null;
+            
+            canAddTicket = hasUrl && hasName && hasStatus;
+        }
+        if (addTicketBtn != null) addTicketBtn.IsEnabled = canAddTicket;
+
+        // Delete Selected validation
+        bool canDelete = ticketsList?.SelectedItem != null;
+        if (deleteSelectedBtn != null) deleteSelectedBtn.IsEnabled = canDelete;
+
+        // Save Changes validation - uvek omogućeno ako ima tiketa (za eksplicitno snimanje)
+        bool canSave = _tickets.Count > 0;
+        if (saveChangesBtn != null) saveChangesBtn.IsEnabled = canSave;
+    }
+
+    private void ClearForm()
+    {
+        var jiraUrlBox = (TextBox)FindName("JiraUrlBox");
+        var ticketNameBox = (TextBox)FindName("TicketNameBox");
+        var statusBox = (ComboBox)FindName("StatusBox");
+        var dataGrid = (DataGrid)FindName("TicketsList");
+        
+        if (jiraUrlBox != null) jiraUrlBox.Text = "";
+        if (ticketNameBox != null) ticketNameBox.Text = "(enter ticket name)";
+        if (statusBox != null) statusBox.SelectedIndex = 0; // To Do
+        if (dataGrid != null) dataGrid.SelectedItem = null;
+    }
+
+    private void ShowStatusMessage(string message, Color color)
+    {
+        var statusMessage = (TextBlock)FindName("StatusMessage");
+        if (statusMessage != null)
+        {
+            statusMessage.Text = message;
+            statusMessage.Foreground = new SolidColorBrush(color);
+            
+            // Auto-hide after 3 seconds
+            var timer = new System.Windows.Threading.DispatcherTimer();
+            timer.Interval = TimeSpan.FromSeconds(3);
+            timer.Tick += (s, args) =>
+            {
+                timer.Stop();
+                statusMessage.Text = "Ready";
+                statusMessage.Foreground = new SolidColorBrush(Colors.Green);
+            };
+            timer.Start();
+        }
+    }
+}
