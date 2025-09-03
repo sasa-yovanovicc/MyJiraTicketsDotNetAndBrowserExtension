@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Jobs - Ticket Status</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(45deg, #2196F3, #21CBF3);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        .stats {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+        }
+        .stat-item {
+            text-align: center;
+            margin: 10px;
+        }
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #2196F3;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .tickets-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+        }
+        .tickets-table th {
+            background: #2196F3;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 500;
+        }
+        .tickets-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            vertical-align: middle;
+        }
+        .tickets-table td:first-child {
+            white-space: nowrap;
+        }
+        .tickets-table tr:hover {
+            background: #f8f9fa;
+        }
+        .ticket-key {
+            font-weight: bold;
+            color: #2196F3;
+            text-decoration: none;
+        }
+        .ticket-key:hover {
+            text-decoration: underline;
+        }
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 500;
+            text-align: center;
+            min-width: 100px;
+            display: inline-block;
+        }
+        .status-todo { background: #ffd700; color: #000; }
+        .status-refinement { background: #e3f2fd; color: #1976d2; }
+        .status-in-progress { background: #0c9073; color: #fff; }
+        .status-waiting-for-deploy { background: #726e6e; color: #fff; }
+        .status-in-test { background: #85c50e; color: #000; }
+        .status-test-succeeded { background: #0c9073; color: #ffff00; }
+        .status-test-failed { background: #f44336; color: #fff; }
+        .status-done { background: transparent; color: #4caf50; font-weight: bold; }
+        .status-canceled { background: #9e9e9e; color: #fff; }
+        .status-on-hold { background: #3b02f7; color: #fbff1c; }
+        .footer {
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>My Jobs - Ticket Status</h1>
+            <p>Last updated: 2025-09-03 13:59:38</p>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-number">5</div>
+                <div class="stat-label">Total Tickets</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">1</div>
+                <div class="stat-label">In Progress</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">0</div>
+                <div class="stat-label">Done</div>
+            </div>
+        </div>
+        <table class="tickets-table">
+            <thead>
+                <tr>
+                    <th>Ticket</th>
+                    <th>Summary</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><a href="https://oblik-team.atlassian.net/browse/LEARNJIRA-1" class="ticket-key" target="_blank">LEARNJIRA-1</a></td>
+                    <td>Security & permissions: How to control who can edit or or manage projects 🚧</td>
+                    <td><span class="status-badge status-todo">To Do</span></td>
+                </tr>
+                <tr>
+                    <td><a href="https://oblik-team.atlassian.net/browse/LEARNJIRA-2" class="ticket-key" target="_blank">LEARNJIRA-2</a></td>
+                    <td>Plans: How to use detailed roadmaps to plan out your work 📍</td>
+                    <td><span class="status-badge status-in-progress">In Progress</span></td>
+                </tr>
+                <tr>
+                    <td><a href="https://oblik-team.atlassian.net/browse/LEARNJIRA-3" class="ticket-key" target="_blank">LEARNJIRA-3</a></td>
+                    <td>Atlassian Intelligence: How to work smarter with AI 🤖</td>
+                    <td><span class="status-badge status-todo">To Do</span></td>
+                </tr>
+                <tr>
+                    <td><a href="https://oblik-team.atlassian.net/browse/SCRUM-1" class="ticket-key" target="_blank">SCRUM-1</a></td>
+                    <td>DEMO-001 demo ticket 001</td>
+                    <td><span class="status-badge status-todo">To Do</span></td>
+                </tr>
+                <tr>
+                    <td><a href="https://oblik-team.atlassian.net/browse/SCRUM-2" class="ticket-key" target="_blank">SCRUM-2</a></td>
+                    <td>DEMO-001 demo bug 001</td>
+                    <td><span class="status-badge status-todo">To Do</span></td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="footer">
+            Generated by MyJiraTickets Ticket Manager
+        </div>
+    </div>
+</body>
+</html>
