@@ -38,9 +38,6 @@ sqlitedb/
 .env.*.local
 local.settings.json
 
-# Internal documentation
-docs/
-
 # User-specific files
 *.user
 *.userosscache

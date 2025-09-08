@@ -23,6 +23,12 @@ A comprehensive WPF application for managing Jira tickets with local SQLite stor
 - Configurable output path
 - Perfect for new tab page extensions
 
+### Interface Preview:
+![Application Interface](docs/img/app.png)
+
+### New Browser Tab Preview:
+![Application Interface](docs/img/new-tab.png)
+
 ## Installation & Setup
 
 ### Prerequisites
